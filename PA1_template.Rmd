@@ -1,5 +1,6 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
+author: "James Kowalik"
 output: 
   html_document:
     keep_md: true
@@ -7,19 +8,113 @@ output:
 
 
 ## Loading and preprocessing the data
-
-
+I will load the data by first downloading the zip file from the URL, then unzipping, and then storing in the object `data`. 
+```{r}
+URL <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+download.file(URL, "./repdata%2Fdata%2Factivity.zip")
+unzip("./repdata%2Fdata%2Factivity.zip", exdir = ".")
+data <- read.csv("./activity.csv")
+```
 
 ## What is mean total number of steps taken per day?
+I will calculate the total number of steps taken per day, first loading `tidyverse` so that `ggplot` can be used and also removing na values.
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+```
+```{r}
+total_steps <- data %>% 
+  group_by(date) %>% 
+  summarise(total_steps_per_day = sum(steps)) %>%
+  .[!is.na(.$total_steps_per_day),] %>%
+  print(n = Inf)
+```
 
+I will print a histogram of the total steps per day.
+```{r}
+total_steps %>%
+  ggplot(aes(total_steps_per_day)) +
+  geom_histogram(binwidth = 2000, col = "black", fill = "blue") + 
+  ggtitle("Histogram of Total Steps Per Day") +
+  xlab("Total Steps Per Day")
+```
 
+I will print the mean and median, converting to a data frame in the final step to show the true mean without rounding.
+```{r}
+total_steps %>% summarise(mean = mean(total_steps_per_day), median = median(total_steps_per_day)) %>%
+  as.data.frame()
+```
 
 ## What is the average daily activity pattern?
+I will create a time series plot of the average daily steps taken per 5 minute time interval, first creating the object `average_steps` to be used both now and later, then removing na values in calculating the mean, and finally plotting with an adjustment to the title font size.
+```{r}
+average_steps <- data %>% 
+  group_by(interval) %>%
+  summarise(mean = mean(steps, na.rm = TRUE))
+average_steps %>% ggplot(aes(interval, mean)) +
+  geom_line(col = "blue") +
+  ggtitle("Time Series Plot of the Average Number of Steps for Each 5-minute Interval") +
+  theme(plot.title = element_text(size=10.5))
+```
 
-
+Next, I will use the `average_steps` object to print the interval with the maximum average. 
+```{r}
+average_steps %>% .[which.max(.$mean),] %>%
+  .$interval
+```
 
 ## Imputing missing values
+I will print the total number of missing values.
+```{r}
+sum(is.na(data))
+```
 
+I will replace all missing values with the average value (across all dates) for that interval. I have already stored these average values in the object `average_steps`. I will then create a new data set, stored as `data2`, where I merge with the averages, replace the missing values and reorder the columns so as to obtain a dataset in the same form as the original dataset, `data`.
+```{r}
+merged_data <- merge(data, average_steps)
+merged_data$steps[is.na(merged_data$steps)] <- merged_data$mean[is.na(merged_data$steps)]
+data2 <- merged_data[order(merged_data$date),]
+data2 <- data2[,c(2,3,1)]
+```
 
+I will repeat the process of my answer to the first question for `data2`. First, the table.
+```{r}
+total_steps2 <- data2 %>% 
+  group_by(date) %>% 
+  summarise(total_steps_per_day = sum(steps)) %>%
+  print(n = Inf)
+```
+
+Second, the histogram.
+```{r}
+total_steps2 %>%
+  ggplot(aes(total_steps_per_day)) +
+  geom_histogram(binwidth = 2000, col = "black", fill = "blue") + 
+  ggtitle("Histogram of Total Steps Per Day, NA values Amended") +
+  xlab("Total Steps Per Day")
+```
+
+Finally, the mean and median.
+```{r}
+total_steps2 %>% summarise(mean = mean(total_steps_per_day), median = median(total_steps_per_day)) %>%
+  as.data.frame()
+```
+Imputing the missing values has caused no change in the mean but a slight increase in the median- it is in fact now the same as the mean.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+I will add a column to `data2` indicating whether the day was a weekday or a weekend day by first converting the date variable to date format and then adding it to create a new object `data3`.
+```{r}
+data2$date <- as.Date(data2$date, format = "%Y-%m-%d")
+data3 <- data2 %>% mutate(Type_of_Day = ifelse(weekdays(date) == "Saturday" | weekdays(date) == "Sunday", "Weekend", "Weekday"))
+```
+
+I will finally make a panel plot by amending the code written for the second question.
+```{r, message = FALSE}
+average_steps3 <- data3 %>% 
+  group_by(interval, Type_of_Day) %>%
+  summarise(mean = mean(steps, na.rm = TRUE))
+average_steps3 %>% ggplot(aes(interval, mean)) +
+  geom_line(col = "blue") +
+  ggtitle("Time Series Plot of the Average Number of Steps for Each 5-minute Interval for Weekdays and Weekends") +
+  theme(plot.title = element_text(size=9)) +
+  facet_grid(Type_of_Day ~ .)
+```
